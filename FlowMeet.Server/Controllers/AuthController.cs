@@ -1,8 +1,6 @@
-using FlowMeet.Server.Data;
-using FlowMeet.Server.Models.Entities;
 using FlowMeet.Server.Models.DTOs;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using FlowMeet.Server.Services;
 
 namespace FlowMeet.Server.Controllers;
 
@@ -10,53 +8,54 @@ namespace FlowMeet.Server.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly AppDbContext _context;
-
-    public AuthController(AppDbContext context)
+    private readonly IAuthService _authService;
+    
+    public AuthController(IAuthService authService)
     {
-        _context = context;
+        _authService = authService;
     }
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        // Проверка есть ли такой email
-        if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+        var (isSuccess, errorMessage) = await _authService.RegisterAsync(request);
+
+        if (!isSuccess)
         {
-            return BadRequest("Пользователь с таким email уже существует");
+            return BadRequest(new { error = errorMessage });
         }
 
-        // Создание User
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = request.Email,
-            PasswordHash = request.Password, // TODO: Добавить хеширование
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            SettingsJson = "{}"
-        };
-        
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
-
-        return Ok("Регистрация успешна");
+        return Ok(new { message = "Регистрация успешна" });
     }
     
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email && u.PasswordHash == request.Password);
+        var authResponse = await _authService.LoginAsync(request);
 
-        if (user == null)
-            return Unauthorized("Неверный логин или пароль");
+        if (authResponse == null)
+        {
+            return Unauthorized(new { error = "Неверный логин или пароль" });
+        }
         
-        return Ok(new AuthResponse 
-        { 
-            Token = "demo-token", 
-            Email = user.Email, 
-            FirstName = user.FirstName 
-        });
+        return Ok(authResponse);
+    }
+
+    [HttpPost("password-reset/request")]
+    public async Task<ActionResult<PasswordResetRequestResponse>> RequestPasswordReset([FromBody] PasswordResetRequest request)
+    {
+        var response = await _authService.RequestPasswordResetAsync(request);
+        return Ok(response);
+    }
+
+    [HttpPost("password-reset/confirm")]
+    public async Task<IActionResult> ConfirmPasswordReset([FromBody] PasswordResetConfirmRequest request)
+    {
+        var (isSuccess, errorMessage) = await _authService.ConfirmPasswordResetAsync(request);
+
+        if (!isSuccess)
+            return BadRequest(new { error = errorMessage });
+
+        return Ok(new { message = "Пароль успешно обновлен" });
     }
 }

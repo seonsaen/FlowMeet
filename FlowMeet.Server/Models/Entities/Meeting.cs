@@ -9,13 +9,6 @@ public enum MeetingStatus
     Cancelled = 2
 }
 
-public enum ParticipantStatus
-{
-    Pending = 0,
-    Accepted = 1,
-    Declined = 2
-}
-
 public class Meeting
 {
     [Key]
@@ -33,16 +26,5 @@ public class Meeting
     
     public MeetingStatus Status { get; set; }
 
-    public List<MeetingParticipant> Participants { get; set; } = new();
-}
-
-public class MeetingParticipant
-{
-    public Guid MeetingId { get; set; }
-    public Meeting? Meeting { get; set; }
-
-    public Guid UserId { get; set; }
-    public User? User { get; set; }
-
-    public ParticipantStatus Status { get; set; }
+    public List<MeetingInvite> Participants { get; set; } = new();
 }

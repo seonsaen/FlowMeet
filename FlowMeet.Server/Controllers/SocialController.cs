@@ -1,102 +1,106 @@
-using FlowMeet.Server.Data;
-using FlowMeet.Server.Models.Entities;
+using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
+using FlowMeet.Server.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace FlowMeet.Server.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class SocialController : ControllerBase
 {
-    private readonly AppDbContext _context;
+    private readonly ISocialService _socialService;
 
-    public SocialController(AppDbContext context)
+    public SocialController(ISocialService socialService)
     {
-        _context = context;
+        _socialService = socialService;
     }
+    
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        userId = Guid.Empty;
 
-    // POST: api/Social/request
-    // Отправить заявку в друзья по Email
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
+    }
+    
     [HttpPost("request")]
     public async Task<IActionResult> SendFriendRequest([FromBody] FriendRequest request)
     {
-        // Ищем друга по email
-        var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.TargetEmail);
-        if (targetUser == null)
-            return NotFound("Пользователь с таким email не найден");
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        var (isSuccess, errorMessage) = await _socialService.SendFriendRequestAsync(userId, request);
 
-        if (targetUser.Id == request.RequesterId)
-            return BadRequest("Нельзя добавить в друзья самого себя");
+        if (!isSuccess)
+            return BadRequest(new { error = errorMessage });
 
-        // Проверяем, нет ли уже связи
-        var existing = await _context.Friendships
-            .FirstOrDefaultAsync(f => 
-                (f.RequesterId == request.RequesterId && f.AddresseeId == targetUser.Id) ||
-                (f.RequesterId == targetUser.Id && f.AddresseeId == request.RequesterId));
-
-        if (existing != null)
-            return BadRequest("Заявка уже отправлена или вы уже друзья");
-
-        // Создаем заявку
-        var friendship = new Friendship
-        {
-            RequesterId = request.RequesterId,
-            AddresseeId = targetUser.Id,
-            Status = FriendshipStatus.Pending // Статус "Ожидает"
-        };
-
-        _context.Friendships.Add(friendship);
-        await _context.SaveChangesAsync();
-
-        return Ok("Заявка в друзья отправлена");
+        return Ok(new { message = "Заявка в друзья отправлена" });
     }
 
-    // POST: api/Social/accept
-    // Принять заявку
+    [HttpGet("requests/incoming")]
+    public async Task<ActionResult<List<AcceptFriendRequest>>> GetIncomingRequests()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        var friendRequests = await _socialService.GetIncomingFriendRequestsAsync(userId);
+        return Ok(friendRequests);
+    }
+    
     [HttpPost("accept")]
-    public async Task<IActionResult> AcceptRequest(Guid requesterId, Guid myId)
+    public async Task<IActionResult> AcceptRequest([FromBody] AcceptFriendRequest request)
     {
-        var friendship = await _context.Friendships
-            .FirstOrDefaultAsync(f => f.RequesterId == requesterId && f.AddresseeId == myId);
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        var (isSuccess, errorMessage) = await _socialService.AcceptRequestAsync(userId, request);
 
-        if (friendship == null)
-            return NotFound("Заявка не найдена");
+        if (!isSuccess)
+            return BadRequest(new { error = errorMessage });
 
-        friendship.Status = FriendshipStatus.Accepted;
-        await _context.SaveChangesAsync();
-
-        return Ok("Теперь вы друзья!");
+        return Ok(new { message = "Теперь вы друзья!" });
     }
 
-    // GET: api/Social/{userId}/friends
-    // Получить список моих друзей
-    [HttpGet("{userId}/friends")]
-    public async Task<ActionResult<List<FriendDto>>> GetFriends(Guid userId)
+    [HttpPost("decline")]
+    public async Task<IActionResult> DeclineRequest([FromBody] AcceptFriendRequest request)
     {
-        var friendships = await _context.Friendships
-            .Include(f => f.Requester)
-            .Include(f => f.Addressee)
-            .Where(f => (f.RequesterId == userId || f.AddresseeId == userId) 
-                        && f.Status == FriendshipStatus.Accepted)
-            .ToListAsync();
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        var (isSuccess, errorMessage) = await _socialService.DeclineRequestAsync(userId, request);
+        
+        if (!isSuccess)
+            return BadRequest(new { error = errorMessage });
+        
+        return Ok(new { message = "Заявка отклонена" });
+    }
+    
+    [HttpGet("me/friends")]
+    public async Task<ActionResult<List<FriendDto>>> GetFriends()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        var friends = await _socialService.GetFriendsAsync(userId);
+        return Ok(friends);
+    }
 
-        var result = new List<FriendDto>();
+    [HttpDelete("me/friends/{userId}")]
+    public async Task<IActionResult> DeleteFriend(Guid userId)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        var (isSuccess, errorMessage) = await _socialService.DeleteFriendAsync(currentUserId, userId);
 
-        foreach (var f in friendships)
+        if (!isSuccess)
         {
-            var friendUser = f.RequesterId == userId ? f.Addressee : f.Requester;
-
-            result.Add(new FriendDto
-            {
-                Id = friendUser.Id,
-                FullName = $"{friendUser.FirstName} {friendUser.LastName}",
-                Email = friendUser.Email,
-                Status = "Accepted"
-            });
+            return BadRequest(new { error  = errorMessage });
         }
-
-        return Ok(result);
+        
+        return Ok(new { isSuccess = true });
     }
 }

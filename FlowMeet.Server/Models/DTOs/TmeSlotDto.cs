@@ -5,7 +5,6 @@ public class TimeSlotDto
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     
-    // Качество слота: "Optimal" (Идеально), "Hard" (У кого-то мало сил), "RequiresMoving" (Нужно двигать гибкие дела)
-    public string Suitability { get; set; } 
-    public string Description { get; set; }
+    public string Suitability { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
 }

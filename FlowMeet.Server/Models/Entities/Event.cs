@@ -26,10 +26,4 @@ public class Event
     public DateTime EndTime { get; set; }
 
     public EventType Type { get; set; }
-
-    // Если true, это событие-шаблон, которое копируется на следующую неделю
-    public bool IsTemplate { get; set; } 
-    
-    // День недели для шаблонных событий
-    public DayOfWeek? TemplateDayOfWeek { get; set; }
 }

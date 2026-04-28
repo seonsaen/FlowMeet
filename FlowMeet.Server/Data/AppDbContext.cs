@@ -12,7 +12,13 @@ public class AppDbContext : DbContext
     public DbSet<Event> Events { get; set; }
     public DbSet<Friendship> Friendships { get; set; }
     public DbSet<Group> Groups { get; set; }
+    public DbSet<GroupMember> GroupMembers { get; set; }
+    public DbSet<GroupInvite> GroupInvites { get; set; }
     public DbSet<Meeting> Meetings { get; set; }
+    public DbSet<MeetingInvite> Invites { get; set; }
+    public DbSet<BaseScheduleEntry> BaseScheduleEntries { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,8 +41,18 @@ public class AppDbContext : DbContext
         
         modelBuilder.Entity<GroupMember>()
             .HasKey(gm => new { gm.GroupId, gm.UserId });
-        
-        modelBuilder.Entity<MeetingParticipant>()
-            .HasKey(mp => new { mp.MeetingId, mp.UserId });
+
+        modelBuilder.Entity<GroupInvite>()
+            .HasKey(gi => new { gi.GroupId, gi.InviteeId });
+
+        modelBuilder.Entity<MeetingInvite>()
+            .HasKey(i => new { i.MeetingId, i.UserId });
+
+        modelBuilder.Entity<Notification>()
+            .HasIndex(n => new { n.UserId, n.CreatedAt });
+
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(t => t.TokenHash)
+            .IsUnique();
     }
 }

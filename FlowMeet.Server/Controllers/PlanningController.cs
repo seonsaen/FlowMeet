@@ -1,37 +1,57 @@
+using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowMeet.Server.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class PlanningController : ControllerBase
 {
-    private readonly PlanningService _planningService;
+    private readonly IPlanningService _planningService;
 
-    public PlanningController(PlanningService planningService)
+    public PlanningController(IPlanningService planningService)
     {
         _planningService = planningService;
+    }
+    
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        userId = Guid.Empty;
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
     }
 
     [HttpPost("find-slots")]
     public async Task<ActionResult<List<TimeSlotDto>>> FindSlots([FromBody] PlanningRequest request)
     {
-        if (request.ParticipantIds == null || !request.ParticipantIds.Any())
-            return BadRequest("Список участников не может быть пустым");
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
+        
+        if (request.ParticipantIds == null)
+            return BadRequest(new { error = "Список участников обязателен" });
+        
+        if (request.DurationMinutes <= 0)
+            return BadRequest(new { error = "Длительность встречи должна быть положительной" });
+        
+        var participantIds = request.ParticipantIds
+            .Append(userId)
+            .Distinct()
+            .ToList();
 
-        var slots = await _planningService.FindGroupSlotsAsync(
-            request.ParticipantIds, 
+        var (isSuccess, errorMessage, slots) = await _planningService.FindGroupSlotsAsync(
+            userId,
+            participantIds, 
             request.StartDate, 
             request.DurationMinutes);
 
-        // Сортируем сначала Идеальные, потом те, что требуют переноса
-        var sortedSlots = slots
-            .OrderBy(s => s.StartTime) // Сначала ближайшие по времени
-            .ThenBy(s => s.Suitability == "Optimal" ? 0 : 1)
-            .ToList();
+        if (!isSuccess)
+            return BadRequest(new { error = errorMessage });
 
-        return Ok(sortedSlots);
+        return Ok(slots);
     }
 }

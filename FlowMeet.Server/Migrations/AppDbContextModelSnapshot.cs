@@ -22,6 +22,41 @@ namespace FlowMeet.Server.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.BaseScheduleEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("interval");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("BaseScheduleEntries");
+                });
+
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.Event", b =>
                 {
                     b.Property<Guid>("Id")
@@ -34,14 +69,8 @@ namespace FlowMeet.Server.Migrations
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsTemplate")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime>("StartTime")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("TemplateDayOfWeek")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -84,6 +113,9 @@ namespace FlowMeet.Server.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -91,9 +123,40 @@ namespace FlowMeet.Server.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("OwnerId");
+
                     b.ToTable("Groups");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.GroupInvite", b =>
+                {
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InviteeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InviterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("GroupId", "InviteeId");
+
+                    b.HasIndex("InviteeId");
+
+                    b.HasIndex("InviterId");
+
+                    b.ToTable("GroupInvites");
                 });
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.GroupMember", b =>
@@ -104,14 +167,17 @@ namespace FlowMeet.Server.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("IsAdmin")
-                        .HasColumnType("boolean");
+                    b.Property<DateTime>("JoinDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
 
                     b.HasKey("GroupId", "UserId");
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("GroupMember");
+                    b.ToTable("GroupMembers");
                 });
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.Meeting", b =>
@@ -146,7 +212,7 @@ namespace FlowMeet.Server.Migrations
                     b.ToTable("Meetings");
                 });
 
-            modelBuilder.Entity("FlowMeet.Server.Models.Entities.MeetingParticipant", b =>
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.MeetingInvite", b =>
                 {
                     b.Property<Guid>("MeetingId")
                         .HasColumnType("uuid");
@@ -161,7 +227,80 @@ namespace FlowMeet.Server.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("MeetingParticipant");
+                    b.ToTable("Invites");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RelatedEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ScheduledFor")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PasswordResetTokens");
                 });
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.User", b =>
@@ -228,6 +367,17 @@ namespace FlowMeet.Server.Migrations
                     b.ToTable("UserStates");
                 });
 
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.BaseScheduleEntry", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.Event", b =>
                 {
                     b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
@@ -256,6 +406,44 @@ namespace FlowMeet.Server.Migrations
                     b.Navigation("Addressee");
 
                     b.Navigation("Requester");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.Group", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.GroupInvite", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.Group", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "Invitee")
+                        .WithMany()
+                        .HasForeignKey("InviteeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "Inviter")
+                        .WithMany()
+                        .HasForeignKey("InviterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+
+                    b.Navigation("Invitee");
+
+                    b.Navigation("Inviter");
                 });
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.GroupMember", b =>
@@ -288,7 +476,7 @@ namespace FlowMeet.Server.Migrations
                     b.Navigation("Initiator");
                 });
 
-            modelBuilder.Entity("FlowMeet.Server.Models.Entities.MeetingParticipant", b =>
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.MeetingInvite", b =>
                 {
                     b.HasOne("FlowMeet.Server.Models.Entities.Meeting", "Meeting")
                         .WithMany("Participants")
@@ -303,6 +491,28 @@ namespace FlowMeet.Server.Migrations
                         .IsRequired();
 
                     b.Navigation("Meeting");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.Notification", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.PasswordResetToken", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });

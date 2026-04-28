@@ -1,76 +1,49 @@
-using FlowMeet.Server.Data;
-using FlowMeet.Server.Models.Entities;
+using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowMeet.Server.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class UserStateController : ControllerBase
 {
-    private readonly AppDbContext _context;
-    private readonly ResourceService _resourceService;
+    private readonly IUserStateService _userStateService;
     
-    public UserStateController(AppDbContext context, ResourceService resourceService)
+    public UserStateController(IUserStateService userStateService)
     {
-        _context = context;
-        _resourceService = resourceService;
+        _userStateService = userStateService;
+    }
+    
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        userId = Guid.Empty;
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
     }
 
-    // POST: api/UserState/mood
-    // Пользователь ставит оценку настроения (1-5)
     [HttpPost("mood")]
     public async Task<IActionResult> SetMood([FromBody] MoodRequest request)
     {
-        if (request.MoodLevel < 1 || request.MoodLevel > 5)
-            return BadRequest("Настроение должно быть от 1 до 5");
-
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        // Проверяем, была ли уже запись сегодня
-        var state = await _context.UserStates
-            .FirstOrDefaultAsync(us => us.UserId == request.UserId && us.Date == today);
-
-        if (state == null)
-        {
-            state = new UserState
-            {
-                UserId = request.UserId,
-                Date = today,
-                MoodLevel = request.MoodLevel,
-                ResourceLevel = 100
-            };
-            _context.UserStates.Add(state);
-        }
-        else
-        {
-            state.MoodLevel = request.MoodLevel;
-        }
-
-        await _context.SaveChangesAsync();
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
         
-        var currentResource = await _resourceService.CalculateResourceAsync(request.UserId);
-        return Ok(new { Message = "Настроение сохранено", CurrentResource = currentResource });
+        var (resourceLevel, message) = await _userStateService.SetMoodAsync(userId, request);
+        
+        return Ok(new { Message = message, CurrentResource = resourceLevel });
     }
 
-    // GET: api/UserState/{userId}/resource
-    // Узнать текущий уровень ресурса
-    [HttpGet("{userId}/resource")]
-    public async Task<ActionResult<ResourceResponse>> GetResource(Guid userId)
+    [HttpGet("me/resource")]
+    public async Task<ActionResult<ResourceResponse>> GetResource()
     {
-        var level = await _resourceService.CalculateResourceAsync(userId);
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { error = "Некорректный токен" });
         
-        string msg = level switch
-        {
-            > 80 => "Вы полны энергии, отличное время для встреч",
-            > 50 => "Нормальный уровень, можно идти на встречу",
-            > 20 => "Вы устали, лучше выбрать короткие встречи",
-            _ => "Вы очень сильно устали, рекомендуется отдых"
-        };
-
-        return Ok(new ResourceResponse { ResourceLevel = level, StatusMessage = msg });
+        var response = await _userStateService.GetResourceStatusAsync(userId);
+        return Ok(response);
     }
 }
