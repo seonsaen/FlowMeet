@@ -9,11 +9,13 @@ public class GroupService : IGroupService
 {
     private readonly AppDbContext _context;
     private readonly INotificationService _notificationService;
+    private readonly IPlanningService _planningService;
 
-    public GroupService(AppDbContext context, INotificationService notificationService)
+    public GroupService(AppDbContext context, INotificationService notificationService, IPlanningService planningService)
     {
         _context = context;
         _notificationService = notificationService;
+        _planningService = planningService;
     }
 
     public async Task<(bool IsSuccess, string ErrorMessage, GroupResponse? Group)> CreateGroupAsync(Guid currentUserId, CreateGroupRequest request)
@@ -76,21 +78,58 @@ public class GroupService : IGroupService
             .Where(gm => gm.UserId == currentUserId)
             .ToListAsync();
 
-        var result = groupMembers.Select(gm => new GroupResponse
+        var result = groupMembers
+            .Select(gm => ToGroupResponse(gm.Group!))
+            .ToList();
+
+        var groupIds = result.Select(group => group.Id).ToList();
+        var upcomingMeetings = await _context.Meetings
+            .AsNoTracking()
+            .Include(meeting => meeting.RelatedGroup)
+            .Include(meeting => meeting.Participants)
+            .ThenInclude(participant => participant.User)
+            .Where(meeting => meeting.Status == MeetingStatus.Confirmed
+                              && meeting.RelatedGroupId != null
+                              && groupIds.Contains(meeting.RelatedGroupId.Value)
+                              && meeting.StartTime > DateTime.UtcNow)
+            .OrderBy(meeting => meeting.StartTime)
+            .ToListAsync();
+
+        foreach (var group in result)
         {
-            Id = gm.Group!.Id,
-            Name = gm.Group.Name,
-            Description = gm.Group.Description,
-            Members = gm.Group.Members.Select(m => new GroupMemberResponse
+            var upcomingMeeting = upcomingMeetings.FirstOrDefault(meeting => meeting.RelatedGroupId == group.Id);
+            if (upcomingMeeting == null)
+                continue;
+
+            group.UpcomingMeeting = new ScheduledMeetingCardDto
             {
-                UserId = m.UserId,
-                Name = m.User!.FirstName + " " + m.User.LastName,
-                Email = m.User.Email,
-                Role = m.Role,
-                IsOwner = m.Role == GroupRole.Owner,
-                JoinDate = m.JoinDate
-            }).ToList()
-        }).ToList();
+                MeetingId = upcomingMeeting.Id,
+                Title = upcomingMeeting.Title,
+                Description = upcomingMeeting.Description,
+                StartTime = upcomingMeeting.StartTime,
+                EndTime = upcomingMeeting.StartTime.Add(upcomingMeeting.Duration),
+                RelatedGroupId = upcomingMeeting.RelatedGroupId,
+                RelatedGroupName = upcomingMeeting.RelatedGroup?.Name
+            };
+
+            var participantIds = group.Members
+                .Where(member => member.UserId != currentUserId)
+                .Select(member => member.UserId)
+                .Distinct()
+                .ToList();
+
+            if (participantIds.Count == 0)
+                continue;
+
+            var planningResult = await _planningService.FindGroupSlotsAsync(
+                currentUserId,
+                participantIds,
+                DateOnly.FromDateTime(DateTime.UtcNow),
+                Math.Max(15, (int)Math.Round(upcomingMeeting.Duration.TotalMinutes)));
+
+            if (planningResult.IsSuccess)
+                group.EarlierAvailableSlot = planningResult.Slots.FirstOrDefault(slot => slot.StartTime < upcomingMeeting.StartTime);
+        }
 
         return (true, string.Empty, result);
     }
@@ -166,6 +205,14 @@ public class GroupService : IGroupService
         if (invitee == null)
             return (false, "Пользователь для приглашения не найден", null);
 
+        var areFriends = await _context.Friendships.AnyAsync(friendship =>
+            friendship.Status == FriendshipStatus.Accepted
+            && ((friendship.RequesterId == currentUserId && friendship.AddresseeId == request.InviteeId)
+                || (friendship.RequesterId == request.InviteeId && friendship.AddresseeId == currentUserId)));
+
+        if (!areFriends)
+            return (false, "Пригласить в группу напрямую можно только пользователя из списка друзей", null);
+
         var isMember = await _context.GroupMembers
             .AnyAsync(gm => gm.GroupId == request.GroupId && gm.UserId == request.InviteeId);
 
@@ -181,9 +228,6 @@ public class GroupService : IGroupService
         {
             if (existingInvite.Status == GroupInviteStatus.Pending)
                 return (false, "Приглашение уже отправлено", null);
-
-            if (existingInvite.Status == GroupInviteStatus.Accepted)
-                return (false, "Пользователь уже принял приглашение", null);
 
             existingInvite.InviterId = currentUserId;
             existingInvite.Status = GroupInviteStatus.Pending;
@@ -282,6 +326,111 @@ public class GroupService : IGroupService
         return (true, string.Empty);
     }
 
+    public async Task<(bool IsSuccess, string ErrorMessage, GroupResponse? Group)> UpdateMemberRoleAsync(Guid currentUserId, Guid groupId, Guid memberId, UpdateGroupMemberRoleRequest request)
+    {
+        var group = await LoadGroupAsync(groupId);
+        if (group == null)
+            return (false, "Группа не найдена", null);
+
+        var actor = group.Members.FirstOrDefault(member => member.UserId == currentUserId);
+        if (actor == null)
+            return (false, "Вы не состоите в этой группе", null);
+
+        if (actor.Role != GroupRole.Owner)
+            return (false, "У вас нет прав менять роли участников", null);
+
+        var target = group.Members.FirstOrDefault(member => member.UserId == memberId);
+        if (target == null)
+            return (false, "Участник группы не найден", null);
+
+        if (target.UserId == currentUserId)
+            return (false, "Нельзя менять собственную роль", null);
+
+        if (target.Role == GroupRole.Owner)
+            return (false, "Нельзя изменить роль владельца", null);
+
+        if (request.Role == GroupRole.Owner)
+            return (false, "Роль владельца нельзя назначить через этот endpoint", null);
+
+        if (target.Role == request.Role)
+            return (false, "Участник уже имеет эту роль", null);
+
+        target.Role = request.Role;
+        await _context.SaveChangesAsync();
+
+        if (target.User != null)
+        {
+            await _notificationService.CreateNotificationAsync(
+                target.UserId,
+                NotificationType.Info,
+                "Роль в группе изменена",
+                $"В группе «{group.Name}» вам назначена роль {GetRoleLabel(request.Role)}",
+                group.Id);
+        }
+
+        return (true, string.Empty, ToGroupResponse(group));
+    }
+
+    public async Task<(bool IsSuccess, string ErrorMessage, GroupResponse? Group)> RemoveMemberAsync(Guid currentUserId, Guid groupId, Guid memberId)
+    {
+        var group = await LoadGroupAsync(groupId);
+        if (group == null)
+            return (false, "Группа не найдена", null);
+
+        var actor = group.Members.FirstOrDefault(member => member.UserId == currentUserId);
+        if (actor == null)
+            return (false, "Вы не состоите в этой группе", null);
+
+        var target = group.Members.FirstOrDefault(member => member.UserId == memberId);
+        if (target == null)
+            return (false, "Участник группы не найден", null);
+
+        if (target.UserId == currentUserId)
+            return (false, "Для выхода из группы используйте отдельное действие", null);
+
+        if (target.Role == GroupRole.Owner)
+            return (false, "Нельзя удалить владельца группы", null);
+
+        var canRemove = actor.Role == GroupRole.Owner
+                        || (actor.Role == GroupRole.Admin && target.Role == GroupRole.Member);
+
+        if (!canRemove)
+            return (false, "У вас нет прав удалить этого участника", null);
+
+        _context.GroupMembers.Remove(target);
+        await _context.SaveChangesAsync();
+
+        if (target.User != null)
+        {
+            await _notificationService.CreateNotificationAsync(
+                target.UserId,
+                NotificationType.Info,
+                "Вы исключены из группы",
+                $"Вас удалили из группы «{group.Name}»",
+                group.Id);
+        }
+
+        group.Members.Remove(target);
+        return (true, string.Empty, ToGroupResponse(group));
+    }
+
+    public async Task<(bool IsSuccess, string ErrorMessage)> LeaveGroupAsync(Guid currentUserId, Guid groupId)
+    {
+        var membership = await _context.GroupMembers
+            .Include(member => member.Group)
+            .FirstOrDefaultAsync(member => member.GroupId == groupId && member.UserId == currentUserId);
+
+        if (membership == null)
+            return (false, "Вы не состоите в этой группе");
+
+        if (membership.Role == GroupRole.Owner)
+            return (false, "Нельзя покинуть группу владельцу");
+
+        _context.GroupMembers.Remove(membership);
+        await _context.SaveChangesAsync();
+        return (true, string.Empty);
+    }
+
     private static GroupResponse ToGroupResponse(Group group) => new()
     {
         Id = group.Id,
@@ -296,5 +445,18 @@ public class GroupService : IGroupService
             IsOwner = m.Role == GroupRole.Owner,
             JoinDate = m.JoinDate
         }).ToList()
+    };
+
+    private async Task<Group?> LoadGroupAsync(Guid groupId) =>
+        await _context.Groups
+            .Include(group => group.Members)
+            .ThenInclude(member => member.User)
+            .FirstOrDefaultAsync(group => group.Id == groupId);
+
+    private static string GetRoleLabel(GroupRole role) => role switch
+    {
+        GroupRole.Admin => "администратор",
+        GroupRole.Member => "участник",
+        _ => "участник"
     };
 }

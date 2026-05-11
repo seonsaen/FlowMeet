@@ -8,5 +8,5 @@ public class RespondToInviteRequest
     public Guid MeetingId { get; set; }
     
     [Required]
-    public bool IsAccepted { get; set; } // true - Принять, false - Отклонить
+    public bool IsAccepted { get; set; }
 }

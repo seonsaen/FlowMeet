@@ -8,6 +8,8 @@ public class GroupResponse
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public List<GroupMemberResponse> Members { get; set; } = new();
+    public ScheduledMeetingCardDto? UpcomingMeeting { get; set; }
+    public TimeSlotDto? EarlierAvailableSlot { get; set; }
 }
 
 public class GroupMemberResponse

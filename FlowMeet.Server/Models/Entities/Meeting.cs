@@ -23,6 +23,9 @@ public class Meeting
 
     public Guid InitiatorId { get; set; }
     public User? Initiator { get; set; }
+
+    public Guid? RelatedGroupId { get; set; }
+    public Group? RelatedGroup { get; set; }
     
     public MeetingStatus Status { get; set; }
 

@@ -10,4 +10,6 @@ public class EventResponse
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public string Type { get; set; } = string.Empty;
+    public string Source { get; set; } = "event";
+    public bool IsEditable { get; set; } = true;
 }

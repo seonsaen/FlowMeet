@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +8,7 @@ namespace FlowMeet.Server.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class PlanningController : ControllerBase
+public class PlanningController : AuthorizedApiController
 {
     private readonly IPlanningService _planningService;
 
@@ -18,25 +17,17 @@ public class PlanningController : ControllerBase
         _planningService = planningService;
     }
     
-    private bool TryGetCurrentUserId(out Guid userId)
-    {
-        userId = Guid.Empty;
-
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
-    }
-
     [HttpPost("find-slots")]
     public async Task<ActionResult<List<TimeSlotDto>>> FindSlots([FromBody] PlanningRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<List<TimeSlotDto>>();
         
         if (request.ParticipantIds == null)
-            return BadRequest(new { error = "Список участников обязателен" });
+            return ErrorResult<List<TimeSlotDto>>("Список участников обязателен");
         
         if (request.DurationMinutes <= 0)
-            return BadRequest(new { error = "Длительность встречи должна быть положительной" });
+            return ErrorResult<List<TimeSlotDto>>("Длительность встречи должна быть положительной");
         
         var participantIds = request.ParticipantIds
             .Append(userId)
@@ -50,7 +41,7 @@ public class PlanningController : ControllerBase
             request.DurationMinutes);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult<List<TimeSlotDto>>(errorMessage);
 
         return Ok(slots);
     }

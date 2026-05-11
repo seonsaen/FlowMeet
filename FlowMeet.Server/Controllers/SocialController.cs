@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +8,7 @@ namespace FlowMeet.Server.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class SocialController : ControllerBase
+public class SocialController : AuthorizedApiController
 {
     private readonly ISocialService _socialService;
 
@@ -18,24 +17,16 @@ public class SocialController : ControllerBase
         _socialService = socialService;
     }
     
-    private bool TryGetCurrentUserId(out Guid userId)
-    {
-        userId = Guid.Empty;
-
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
-    }
-    
     [HttpPost("request")]
     public async Task<IActionResult> SendFriendRequest([FromBody] FriendRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage) = await _socialService.SendFriendRequestAsync(userId, request);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
 
         return Ok(new { message = "Заявка в друзья отправлена" });
     }
@@ -44,7 +35,7 @@ public class SocialController : ControllerBase
     public async Task<ActionResult<List<AcceptFriendRequest>>> GetIncomingRequests()
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<List<AcceptFriendRequest>>();
         
         var friendRequests = await _socialService.GetIncomingFriendRequestsAsync(userId);
         return Ok(friendRequests);
@@ -54,12 +45,12 @@ public class SocialController : ControllerBase
     public async Task<IActionResult> AcceptRequest([FromBody] AcceptFriendRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage) = await _socialService.AcceptRequestAsync(userId, request);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
 
         return Ok(new { message = "Теперь вы друзья!" });
     }
@@ -68,12 +59,12 @@ public class SocialController : ControllerBase
     public async Task<IActionResult> DeclineRequest([FromBody] AcceptFriendRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage) = await _socialService.DeclineRequestAsync(userId, request);
         
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
         
         return Ok(new { message = "Заявка отклонена" });
     }
@@ -82,7 +73,7 @@ public class SocialController : ControllerBase
     public async Task<ActionResult<List<FriendDto>>> GetFriends()
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<List<FriendDto>>();
         
         var friends = await _socialService.GetFriendsAsync(userId);
         return Ok(friends);
@@ -92,13 +83,13 @@ public class SocialController : ControllerBase
     public async Task<IActionResult> DeleteFriend(Guid userId)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage) = await _socialService.DeleteFriendAsync(currentUserId, userId);
 
         if (!isSuccess)
         {
-            return BadRequest(new { error  = errorMessage });
+            return ErrorResult(errorMessage);
         }
         
         return Ok(new { isSuccess = true });

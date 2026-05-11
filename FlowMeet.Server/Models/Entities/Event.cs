@@ -4,9 +4,9 @@ namespace FlowMeet.Server.Models.Entities;
 
 public enum EventType
 {
-    Mandatory = 0, // Обязательное
-    Flexible = 1,  // Опциональное/Переносимое
-    Desirable = 2  // Желательное
+    Mandatory = 0,
+    Flexible = 1,
+    Desirable = 2
 }
 
 public class Event

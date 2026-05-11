@@ -19,4 +19,6 @@ public class CreateMeetingRequest
     [Required]
     [MinLength(1, ErrorMessage = "Встреча должна включать хотя бы одного приглашенного")]
     public List<Guid> ParticipantIds { get; set; } = new();
+
+    public Guid? GroupId { get; set; }
 }

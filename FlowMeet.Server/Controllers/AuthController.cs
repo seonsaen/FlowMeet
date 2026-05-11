@@ -25,7 +25,18 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = errorMessage });
         }
 
-        return Ok(new { message = "Регистрация успешна" });
+        return Ok(new { message = "Код подтверждения отправлен на почту" });
+    }
+
+    [HttpPost("register/confirm")]
+    public async Task<IActionResult> ConfirmRegistration([FromBody] ConfirmRegistrationRequest request)
+    {
+        var (isSuccess, errorMessage) = await _authService.ConfirmRegistrationAsync(request);
+
+        if (!isSuccess)
+            return BadRequest(new { error = errorMessage });
+
+        return Ok(new { message = "Регистрация подтверждена. Теперь вы можете войти" });
     }
     
     [HttpPost("login")]

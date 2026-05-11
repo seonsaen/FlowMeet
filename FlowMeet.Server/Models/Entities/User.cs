@@ -16,7 +16,6 @@ public class User
 
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
-    public string? AvatarUrl { get; set; }
     
     public string SettingsJson { get; set; } = "{}";
     
@@ -24,4 +23,5 @@ public class User
     public List<UserState> States { get; set; } = new();
     public List<Friendship> SentFriendRequests { get; set; } = new();
     public List<Friendship> ReceivedFriendRequests { get; set; } = new();
+    public List<EmailVerificationCode> EmailVerificationCodes { get; set; } = new();
 }

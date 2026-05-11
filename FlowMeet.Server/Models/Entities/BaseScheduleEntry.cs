@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace FlowMeet.Server.Models.Entities;
 
-// Шаблонная запись недельного расписания
 public class BaseScheduleEntry
 {
     [Key]
@@ -27,4 +26,8 @@ public class BaseScheduleEntry
     public TimeSpan EndTime { get; set; }
 
     public EventType Type { get; set; }
+
+    public DateOnly EffectiveFromDate { get; set; }
+
+    public DateOnly? EffectiveToDate { get; set; }
 }

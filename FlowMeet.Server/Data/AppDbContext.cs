@@ -17,8 +17,9 @@ public class AppDbContext : DbContext
     public DbSet<Meeting> Meetings { get; set; }
     public DbSet<MeetingInvite> Invites { get; set; }
     public DbSet<BaseScheduleEntry> BaseScheduleEntries { get; set; }
+    public DbSet<BaseScheduleOccurrenceException> BaseScheduleOccurrenceExceptions { get; set; }
     public DbSet<Notification> Notifications { get; set; }
-    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+    public DbSet<EmailVerificationCode> EmailVerificationCodes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,11 +49,20 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MeetingInvite>()
             .HasKey(i => new { i.MeetingId, i.UserId });
 
+        modelBuilder.Entity<BaseScheduleOccurrenceException>()
+            .HasIndex(e => new { e.BaseScheduleEntryId, e.Date })
+            .IsUnique();
+
         modelBuilder.Entity<Notification>()
             .HasIndex(n => new { n.UserId, n.CreatedAt });
 
-        modelBuilder.Entity<PasswordResetToken>()
-            .HasIndex(t => t.TokenHash)
-            .IsUnique();
+        modelBuilder.Entity<EmailVerificationCode>()
+            .HasIndex(code => new { code.Email, code.Purpose, code.CreatedAt });
+
+        modelBuilder.Entity<Meeting>()
+            .HasOne(meeting => meeting.RelatedGroup)
+            .WithMany(group => group.Meetings)
+            .HasForeignKey(meeting => meeting.RelatedGroupId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

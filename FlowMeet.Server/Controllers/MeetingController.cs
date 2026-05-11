@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +8,7 @@ namespace FlowMeet.Server.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class MeetingController : ControllerBase
+public class MeetingController : AuthorizedApiController
 {
     private readonly IMeetingService _meetingService;
 
@@ -18,24 +17,16 @@ public class MeetingController : ControllerBase
         _meetingService = meetingService;
     }
 
-    private bool TryGetCurrentUserId(out Guid userId)
-    {
-        userId = Guid.Empty;
-
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
-    }
-    
     [HttpPost]
     public async Task<IActionResult> CreateMeeting([FromBody] CreateMeetingRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage) = await _meetingService.CreateMeetingAsync(userId, request);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
 
         return Ok(new { message = "Встреча создана, приглашения отправлены" });
     }
@@ -44,12 +35,12 @@ public class MeetingController : ControllerBase
     public async Task<IActionResult> UpdateMeeting(Guid id, [FromBody] UpdateMeetingRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
 
         var (isSuccess, errorMessage) = await _meetingService.UpdateMeetingAsync(userId, id, request);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
 
         return Ok(new { message = "Встреча обновлена" });
     }
@@ -58,12 +49,12 @@ public class MeetingController : ControllerBase
     public async Task<IActionResult> DeleteMeeting(Guid id)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
 
         var (isSuccess, errorMessage) = await _meetingService.DeleteMeetingAsync(userId, id);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
 
         return Ok(new { message = "Встреча удалена" });
     }
@@ -72,22 +63,52 @@ public class MeetingController : ControllerBase
     public async Task<ActionResult<List<IncomingInviteDto>>> GetIncomingInvites()
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<List<IncomingInviteDto>>();
         
         var invites = await _meetingService.GetIncomingInvitesAsync(userId);
         return Ok(invites);
+    }
+
+    [HttpGet("outgoing")]
+    public async Task<ActionResult<List<OutgoingInviteDto>>> GetOutgoingInvites()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return UnauthorizedToken<List<OutgoingInviteDto>>();
+
+        var invites = await _meetingService.GetOutgoingInvitesAsync(userId);
+        return Ok(invites);
+    }
+
+    [HttpGet("mine")]
+    public async Task<ActionResult<List<MeetingOverviewDto>>> GetMyMeetings()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return UnauthorizedToken<List<MeetingOverviewDto>>();
+
+        var meetings = await _meetingService.GetMyMeetingsAsync(userId);
+        return Ok(meetings);
+    }
+
+    [HttpGet("history")]
+    public async Task<ActionResult<List<MeetingOverviewDto>>> GetMeetingHistory()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return UnauthorizedToken<List<MeetingOverviewDto>>();
+
+        var meetings = await _meetingService.GetMeetingHistoryAsync(userId);
+        return Ok(meetings);
     }
 
     [HttpPost("respond")]
     public async Task<IActionResult> RespondToInvite([FromBody] RespondToInviteRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage) = await _meetingService.RespondToInviteAsync(userId, request);
 
         if (!isSuccess)
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
 
         return Ok(new
         {

@@ -11,4 +11,7 @@ public interface IGroupService
     Task<(bool IsSuccess, string ErrorMessage, GroupInviteResponse? Invite)> InviteToGroupAsync(Guid currentUserId, InviteToGroupRequest request);
     Task<List<GroupIncomingInviteDto>> GetIncomingInvitesAsync(Guid currentUserId);
     Task<(bool IsSuccess, string ErrorMessage)> RespondToInviteAsync(Guid currentUserId, RespondToGroupInviteRequest request);
+    Task<(bool IsSuccess, string ErrorMessage, GroupResponse? Group)> UpdateMemberRoleAsync(Guid currentUserId, Guid groupId, Guid memberId, UpdateGroupMemberRoleRequest request);
+    Task<(bool IsSuccess, string ErrorMessage, GroupResponse? Group)> RemoveMemberAsync(Guid currentUserId, Guid groupId, Guid memberId);
+    Task<(bool IsSuccess, string ErrorMessage)> LeaveGroupAsync(Guid currentUserId, Guid groupId);
 }

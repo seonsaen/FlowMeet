@@ -7,7 +7,9 @@ public interface INotificationService
 {
     Task<List<NotificationDto>> GetNotificationsAsync(Guid userId, bool unreadOnly);
     Task<NotificationDto> CreateNotificationAsync(Guid userId, NotificationType type, string title, string message, Guid? relatedEntityId = null, DateTime? scheduledFor = null);
-    Task<(bool IsSuccess, string ErrorMessage, NotificationDto? Notification)> CreateReminderAsync(Guid userId, CreateReminderRequest request);
+    Task SyncMeetingNotificationsForMeetingAsync(Guid meetingId, CancellationToken cancellationToken = default);
+    Task SyncMeetingNotificationsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<int> DispatchDueScheduledNotificationsAsync(CancellationToken cancellationToken = default);
     Task<(bool IsSuccess, string ErrorMessage)> MarkAsReadAsync(Guid userId, Guid notificationId);
     Task<(bool IsSuccess, string ErrorMessage)> DeleteNotificationAsync(Guid userId, Guid notificationId);
 }

@@ -5,23 +5,13 @@ namespace FlowMeet.Server.Models.DTOs;
 
 public class UpdateProfileRequest
 {
-    [EmailAddress]
-    public string? Email { get; set; }
-
     [MaxLength(50)]
     public string? FirstName { get; set; }
 
     [MaxLength(50)]
     public string? LastName { get; set; }
 
-    public string? AvatarUrl { get; set; }
-
     public string? SettingsJson { get; set; }
-
-    public string? CurrentPassword { get; set; }
-
-    [MinLength(6)]
-    public string? NewPassword { get; set; }
 }
 
 public class ProfileResponse
@@ -30,7 +20,6 @@ public class ProfileResponse
     public string Email { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
-    public string? AvatarUrl { get; set; }
     public string SettingsJson { get; set; } = "{}";
 }
 
@@ -55,4 +44,8 @@ public class BaseScheduleEntryDto
 
     [Range(0, 2)]
     public EventType Type { get; set; }
+
+    public DateOnly? EffectiveFromDate { get; set; }
+
+    public DateOnly? EffectiveToDate { get; set; }
 }

@@ -7,8 +7,7 @@ public enum NotificationType
     Info = 0,
     FriendRequest = 1,
     GroupInvite = 2,
-    MeetingInvite = 3,
-    Reminder = 4
+    MeetingInvite = 3
 }
 
 public class Notification
@@ -32,5 +31,6 @@ public class Notification
     public Guid? RelatedEntityId { get; set; }
     public DateTime? ScheduledFor { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? DispatchedAt { get; set; }
     public DateTime? ReadAt { get; set; }
 }

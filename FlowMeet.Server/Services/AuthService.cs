@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace FlowMeet.Server.Services;
 
@@ -15,33 +16,78 @@ public class AuthService : IAuthService
 {
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IEmailService _emailService;
+    private readonly SmtpEmailOptions _smtpOptions;
 
-    public AuthService(AppDbContext context, IConfiguration configuration)
+    public AuthService(
+        AppDbContext context,
+        IConfiguration configuration,
+        IEmailService emailService,
+        IOptions<SmtpEmailOptions> smtpOptions)
     {
         _context = context;
         _configuration = configuration;
+        _emailService = emailService;
+        _smtpOptions = smtpOptions.Value;
     }
 
     public async Task<(bool IsSuccess, string ErrorMessage)> RegisterAsync(RegisterRequest request)
     {
-        // Проверка есть ли такой email
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-        {
             return (false, "Пользователь с таким email уже существует");
-        }
 
-        // Создание пользователя
+        var code = GenerateVerificationCode();
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+        await UpsertEmailVerificationCodeAsync(
+            request.Email,
+            EmailVerificationPurpose.Registration,
+            code,
+            userId: null,
+            request.FirstName,
+            request.LastName,
+            passwordHash);
+
+        await SendVerificationCodeAsync(
+            request.Email,
+            "Подтверждение регистрации FlowMeet",
+            $"""
+            Подтверждение регистрации FlowMeet
+
+            Код подтверждения: {code}
+
+            Код действителен 15 минут.
+            """);
+
+        return (true, string.Empty);
+    }
+
+    public async Task<(bool IsSuccess, string ErrorMessage)> ConfirmRegistrationAsync(ConfirmRegistrationRequest request)
+    {
+        if (await _context.Users.AnyAsync(user => user.Email == request.Email))
+            return (false, "Пользователь с таким email уже существует");
+
+        var verificationCode = await _context.EmailVerificationCodes
+            .Where(code => code.Email == request.Email
+                           && code.Purpose == EmailVerificationPurpose.Registration
+                           && code.UsedAt == null
+                           && code.ExpiresAt >= DateTime.UtcNow)
+            .OrderByDescending(code => code.CreatedAt)
+            .FirstOrDefaultAsync(code => code.CodeHash == HashCode(request.Code));
+
+        if (verificationCode == null || string.IsNullOrWhiteSpace(verificationCode.PendingPasswordHash))
+            return (false, "Код подтверждения недействителен или истёк");
+
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Email = request.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password), // Хэширование
-            FirstName = request.FirstName,
-            LastName = request.LastName,
+            Email = verificationCode.Email,
+            PasswordHash = verificationCode.PendingPasswordHash,
+            FirstName = verificationCode.FirstName,
+            LastName = verificationCode.LastName,
             SettingsJson = "{}"
         };
 
-        // Сохранение в БД
+        verificationCode.UsedAt = DateTime.UtcNow;
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
@@ -54,7 +100,7 @@ public class AuthService : IAuthService
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            return null; // Пароль не совпал или пользователя нет
+            return null;
         }
 
         var token = GenerateJwtToken(user);
@@ -68,57 +114,58 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task<PasswordResetRequestResponse> RequestPasswordResetAsync(PasswordResetRequest request)
+    public async Task<PasswordResetRequestResponse> RequestPasswordResetAsync(PasswordResetRequest request, CancellationToken cancellationToken = default)
     {
         var response = new PasswordResetRequestResponse
         {
-            Message = "Если пользователь с таким email существует, инструкция по восстановлению будет отправлена"
+            Message = "Если пользователь с таким email существует, код восстановления будет отправлен"
         };
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
         if (user == null)
             return response;
 
-        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
+        var code = GenerateVerificationCode();
+        await UpsertEmailVerificationCodeAsync(
+            user.Email,
+            EmailVerificationPurpose.PasswordReset,
+            code,
+            user.Id,
+            firstName: null,
+            lastName: null,
+            pendingPasswordHash: null,
+            cancellationToken);
 
-        var resetToken = new PasswordResetToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            TokenHash = HashToken(token),
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddHours(1)
-        };
+        var subject = "Восстановление пароля FlowMeet";
+        var textBody = $"""
+            Вы запросили восстановление пароля для FlowMeet.
 
-        _context.PasswordResetTokens.Add(resetToken);
-        await _context.SaveChangesAsync();
+            Код подтверждения: {code}
 
-        // В проекте пока нет email-провайдера, поэтому возвращаем токен для клиента/dev-сценария.
-        response.ResetToken = token;
+            Код действителен 15 минут.
+            """;
+        await _emailService.SendAsync(user.Email, subject, textBody, cancellationToken);
+
         return response;
     }
 
     public async Task<(bool IsSuccess, string ErrorMessage)> ConfirmPasswordResetAsync(PasswordResetConfirmRequest request)
     {
-        var tokenHash = HashToken(request.Token);
-        var resetToken = await _context.PasswordResetTokens
-            .Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
+        var codeHash = HashCode(request.Code);
+        var resetCode = await _context.EmailVerificationCodes
+            .Include(code => code.User)
+            .Where(code => code.Email == request.Email
+                           && code.Purpose == EmailVerificationPurpose.PasswordReset
+                           && code.UsedAt == null
+                           && code.ExpiresAt >= DateTime.UtcNow)
+            .OrderByDescending(code => code.CreatedAt)
+            .FirstOrDefaultAsync(code => code.CodeHash == codeHash);
 
-        if (resetToken == null || resetToken.User == null)
-            return (false, "Токен восстановления недействителен");
+        if (resetCode == null || resetCode.User == null)
+            return (false, "Код восстановления недействителен или истек");
 
-        if (resetToken.UsedAt.HasValue)
-            return (false, "Токен восстановления уже использован");
-
-        if (resetToken.ExpiresAt < DateTime.UtcNow)
-            return (false, "Срок действия токена восстановления истек");
-
-        resetToken.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        resetToken.UsedAt = DateTime.UtcNow;
+        resetCode.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        resetCode.UsedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return (true, string.Empty);
@@ -147,9 +194,57 @@ public class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static string HashToken(string token)
+    private async Task UpsertEmailVerificationCodeAsync(
+        string email,
+        EmailVerificationPurpose purpose,
+        string rawCode,
+        Guid? userId,
+        string? firstName,
+        string? lastName,
+        string? pendingPasswordHash,
+        CancellationToken cancellationToken = default)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        var existingCodes = await _context.EmailVerificationCodes
+            .Where(code => code.Purpose == purpose
+                           && code.UsedAt == null
+                           && ((userId != null && code.UserId == userId) || code.Email == email))
+            .ToListAsync(cancellationToken);
+
+        if (existingCodes.Count > 0)
+            _context.EmailVerificationCodes.RemoveRange(existingCodes);
+
+        _context.EmailVerificationCodes.Add(new EmailVerificationCode
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            UserId = userId,
+            Purpose = purpose,
+            CodeHash = HashCode(rawCode),
+            PendingPasswordHash = pendingPasswordHash,
+            FirstName = firstName ?? string.Empty,
+            LastName = lastName ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15)
+        });
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SendVerificationCodeAsync(string email, string subject, string textBody, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_smtpOptions.Host))
+        {
+            return;
+        }
+
+        await _emailService.SendAsync(email, subject, textBody, cancellationToken);
+    }
+
+    private static string GenerateVerificationCode() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+
+    private static string HashCode(string code)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code));
         return Convert.ToHexString(bytes);
     }
 }

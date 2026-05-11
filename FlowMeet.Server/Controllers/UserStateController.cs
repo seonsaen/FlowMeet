@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +8,7 @@ namespace FlowMeet.Server.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class UserStateController : ControllerBase
+public class UserStateController : AuthorizedApiController
 {
     private readonly IUserStateService _userStateService;
     
@@ -18,19 +17,11 @@ public class UserStateController : ControllerBase
         _userStateService = userStateService;
     }
     
-    private bool TryGetCurrentUserId(out Guid userId)
-    {
-        userId = Guid.Empty;
-
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
-    }
-
     [HttpPost("mood")]
     public async Task<IActionResult> SetMood([FromBody] MoodRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (resourceLevel, message) = await _userStateService.SetMoodAsync(userId, request);
         
@@ -41,7 +32,7 @@ public class UserStateController : ControllerBase
     public async Task<ActionResult<ResourceResponse>> GetResource()
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<ResourceResponse>();
         
         var response = await _userStateService.GetResourceStatusAsync(userId);
         return Ok(response);

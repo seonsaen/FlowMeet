@@ -6,6 +6,25 @@
 # dotenv files
 .env
 
+# frontend
+Flowmeet.Client/node_modules/
+Flowmeet.Client/dist/
+Flowmeet.Client/.env
+Flowmeet.Client/.env.*
+
+# backend
+FlowMeet.Server/bin/
+FlowMeet.Server/obj/
+FlowMeet.Server/appsettings.Development.json
+FlowMeet.Server/appsettings.Local.json
+
+# system/editor
+.DS_Store
+.vs/
+*.user
+*.suo
+
+
 # User-specific files
 *.rsuser
 *.suo

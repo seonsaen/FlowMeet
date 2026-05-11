@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FlowMeet.Server.Models.DTOs;
 using FlowMeet.Server.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +8,7 @@ namespace FlowMeet.Server.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class EventController : ControllerBase
+public class EventController : AuthorizedApiController
 {
     private readonly IEventService _eventService;
 
@@ -17,39 +16,28 @@ public class EventController : ControllerBase
     {
         _eventService = eventService;
     }
-
-    private bool TryGetCurrentUserId(out Guid userId)
-    {
-        userId = Guid.Empty;
-
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return !string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
-    }
     
-    // Получить расписание конкретного пользователя
     [HttpGet("me")]
     public async Task<ActionResult<List<EventResponse>>> GetUserSchedule()
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<List<EventResponse>>();
         
         var response = await _eventService.GetUserScheduleAsync(userId);
         return Ok(response);
     }
     
-    // Добавить событие
     [HttpPost]
     public async Task<IActionResult> CreateEvent([FromBody] CreateEventRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var (isSuccess, errorMessage, evId) = await _eventService.CreateEventAsync(userId, request);
 
         if (!isSuccess)
         {
-            // Возвращаем 400 Bad Request, если пользователь не найден или время указано неверно
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult(errorMessage);
         }
 
         return Ok(new { message = "Событие успешно создано", eventId = evId });
@@ -59,16 +47,42 @@ public class EventController : ControllerBase
     public async Task<ActionResult<EventResponse>> UpdateEvent(Guid id, UpdateEventRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken<EventResponse>();
         
         var (isSuccess, errorMessage) = await _eventService.UpdateEventAsync(userId, id, request);
 
         if (!isSuccess)
         {
-            return BadRequest(new { error = errorMessage });
+            return ErrorResult<EventResponse>(errorMessage);
         }
         
         return Ok(new { message = "Событие успешно обновлено", eventId = id });
+    }
+
+    [HttpPost("base-occurrence/override")]
+    public async Task<IActionResult> OverrideBaseOccurrence([FromBody] OverrideBaseScheduleOccurrenceRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return UnauthorizedToken();
+
+        var (isSuccess, errorMessage, eventId) = await _eventService.OverrideBaseOccurrenceAsync(userId, request);
+        if (!isSuccess)
+            return ErrorResult(errorMessage);
+
+        return Ok(new { message = "Изменение применено только к выбранному дню", eventId });
+    }
+
+    [HttpPost("base-occurrence/cancel")]
+    public async Task<IActionResult> CancelBaseOccurrence([FromBody] CancelBaseScheduleOccurrenceRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return UnauthorizedToken();
+
+        var (isSuccess, errorMessage) = await _eventService.CancelBaseOccurrenceAsync(userId, request);
+        if (!isSuccess)
+            return ErrorResult(errorMessage);
+
+        return Ok(new { message = "Базовый блок скрыт только для выбранного дня" });
     }
 
     
@@ -76,13 +90,13 @@ public class EventController : ControllerBase
     public async Task<IActionResult> DeleteEvent(Guid id)
     {
         if (!TryGetCurrentUserId(out var userId))
-            return Unauthorized(new { error = "Некорректный токен" });
+            return UnauthorizedToken();
         
         var isDeleted = await _eventService.DeleteEventAsync(userId, id);
 
         if (!isDeleted)
         {
-            return NotFound(new { error = "Событие не найдено" });
+            return ErrorResult("Событие не найдено");
         }
 
         return Ok(new { message = "Событие успешно удалено" });

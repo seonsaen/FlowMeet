@@ -18,4 +18,5 @@ public class Group
     public DateTime CreatedDate { get; set; }
 
     public List<GroupMember> Members { get; set; } = new();
+    public List<Meeting> Meetings { get; set; } = new();
 }

@@ -1,4 +1,6 @@
 ﻿using System;
+using FlowMeet.Server.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FlowMeet.Server.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(AppDbContext))]
     [Migration("20260423000000_AddNotificationsAndPasswordReset")]
     public partial class AddNotificationsAndPasswordReset : Migration
     {

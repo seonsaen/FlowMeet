@@ -34,6 +34,12 @@ namespace FlowMeet.Server.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly>("EffectiveFromDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveToDate")
+                        .HasColumnType("date");
+
                     b.Property<TimeSpan>("EndTime")
                         .HasColumnType("interval");
 
@@ -55,6 +61,85 @@ namespace FlowMeet.Server.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("BaseScheduleEntries");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.BaseScheduleOccurrenceException", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BaseScheduleEntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("OverrideEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OverrideEventId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("BaseScheduleEntryId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("BaseScheduleOccurrenceExceptions");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.EmailVerificationCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PendingPasswordHash")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Purpose")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("Email", "Purpose", "CreatedAt");
+
+                    b.ToTable("EmailVerificationCodes");
                 });
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.Event", b =>
@@ -195,6 +280,9 @@ namespace FlowMeet.Server.Migrations
                     b.Property<Guid>("InitiatorId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("RelatedGroupId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("StartTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -208,6 +296,8 @@ namespace FlowMeet.Server.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InitiatorId");
+
+                    b.HasIndex("RelatedGroupId");
 
                     b.ToTable("Meetings");
                 });
@@ -237,6 +327,9 @@ namespace FlowMeet.Server.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DispatchedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Message")
@@ -271,46 +364,11 @@ namespace FlowMeet.Server.Migrations
                     b.ToTable("Notifications");
                 });
 
-            modelBuilder.Entity("FlowMeet.Server.Models.Entities.PasswordResetToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UsedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("PasswordResetTokens");
-                });
-
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<string>("AvatarUrl")
-                        .HasColumnType("text");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -345,6 +403,9 @@ namespace FlowMeet.Server.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("BackgroundLoadLevel")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
 
@@ -354,7 +415,13 @@ namespace FlowMeet.Server.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("text");
 
+                    b.Property<int>("RawBalance")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ResourceLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SleepQuality")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("UserId")
@@ -374,6 +441,40 @@ namespace FlowMeet.Server.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.BaseScheduleOccurrenceException", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.BaseScheduleEntry", "BaseScheduleEntry")
+                        .WithMany()
+                        .HasForeignKey("BaseScheduleEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FlowMeet.Server.Models.Entities.Event", "OverrideEvent")
+                        .WithMany()
+                        .HasForeignKey("OverrideEventId");
+
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BaseScheduleEntry");
+
+                    b.Navigation("OverrideEvent");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FlowMeet.Server.Models.Entities.EmailVerificationCode", b =>
+                {
+                    b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
+                        .WithMany("EmailVerificationCodes")
+                        .HasForeignKey("UserId");
 
                     b.Navigation("User");
                 });
@@ -473,7 +574,14 @@ namespace FlowMeet.Server.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("FlowMeet.Server.Models.Entities.Group", "RelatedGroup")
+                        .WithMany("Meetings")
+                        .HasForeignKey("RelatedGroupId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Initiator");
+
+                    b.Navigation("RelatedGroup");
                 });
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.MeetingInvite", b =>
@@ -506,17 +614,6 @@ namespace FlowMeet.Server.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("FlowMeet.Server.Models.Entities.PasswordResetToken", b =>
-                {
-                    b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.UserState", b =>
                 {
                     b.HasOne("FlowMeet.Server.Models.Entities.User", "User")
@@ -530,6 +627,8 @@ namespace FlowMeet.Server.Migrations
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.Group", b =>
                 {
+                    b.Navigation("Meetings");
+
                     b.Navigation("Members");
                 });
 
@@ -540,6 +639,8 @@ namespace FlowMeet.Server.Migrations
 
             modelBuilder.Entity("FlowMeet.Server.Models.Entities.User", b =>
                 {
+                    b.Navigation("EmailVerificationCodes");
+
                     b.Navigation("Events");
 
                     b.Navigation("ReceivedFriendRequests");
